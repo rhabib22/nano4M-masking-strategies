@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Masking Strategies for nano4M: a controlled five-way comparison of pre-training masks on a small multimodal masked model trained on CLEVR. COM-304 Spring 2026, EPFL, Team 11.">
+  <meta name="keywords"
+        content="nano4M, 4M, multimodal masked modeling, masking strategy, CLEVR, COM-304, EPFL">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Masking Strategies for nano4M</title>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+</head>
+<body>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <img src="static/images/epfl_logo.png" alt="EPFL" class="hero-logo">
+          <h1 class="title is-1 publication-title">Masking Strategies for nano4M</h1>
+          <h2 class="subtitle is-4 publication-subtitle">
+            How the pre-training mask shapes what a small multimodal model learns
+          </h2>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">Ricardo Habib,</span>
+            <span class="author-block">Ralph Chidiac,</span>
+            <span class="author-block">Nacer Saadani-Hassani,</span>
+            <span class="author-block">Gabriel Chidiac</span>
+          </div>
+
+          <div class="is-size-6 publication-affiliation">
+            <span class="affiliation-block">
+              &Eacute;cole Polytechnique F&eacute;d&eacute;rale de Lausanne
+            </span>
+            <br>
+            <span class="affiliation-block">
+              COM-304 Foundation Models &middot; Spring 2026 &middot; Team 11
+            </span>
+          </div>
+
+          <div class="publication-links">
+            <span class="link-block">
+              <a href="static/pdfs/Final_Report_Team_11.pdf"
+                 class="external-link button is-normal is-rounded is-dark">
+                <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                <span>Report (PDF)</span>
+              </a>
+            </span>
+            <span class="link-block">
+              <a href="#bibtex"
+                 class="external-link button is-normal is-rounded is-dark">
+                <span class="icon"><i class="fas fa-quote-left"></i></span>
+                <span>BibTeX</span>
+              </a>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Abstract -->
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            We study how the choice of masking strategy at pre-training affects what
+            a small multimodal model learns. Building on nano4M, we train five
+            variants on CLEVR with identical architecture, data, compute and seeds,
+            varying only the masking strategy: random (V0), 2D block (V1),
+            context-block (V2), text-side contiguous span (V3), and a per-sample
+            50/50 mix of V0 and V2 (V4). We evaluate every variant under one
+            unified protocol across reconstruction and cross-modal generation,
+            scoring with seven complementary metrics. Three different masks produce
+            three different specialists. V2 wins the meaning-aware and object-grounded
+            metrics in both generation directions. V1 wins pixel-level reconstruction.
+            V4 wins lexical caption similarity in image-to-caption, a metric neither
+            of its constituent strategies leads alone. V3 ties with the random
+            baseline on every text metric, which we report as an honest negative
+            result attributable to visual grounding being the bottleneck in our
+            four-modality setup.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TL;DR -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3 has-text-centered">Key takeaways</h2>
+        <div class="content">
+          <ul>
+            <li>
+              <b>The mask is the objective.</b> Different pre-training masks produce
+              different specialist behaviours, even with identical architecture,
+              data, compute and seeds.
+            </li>
+            <li>
+              <b>Context-block masking (V2)</b> forces cross-modal binding by hiding
+              most of every image-side modality. It beats the random baseline on
+              parser field accuracy by a factor of 2.4 and tops the LLM judge and
+              the object-detection F1.
+            </li>
+            <li>
+              <b>Block masking (V1)</b> wins pixel reconstruction. Removing the
+              local-neighbour shortcut sharpens depth boundaries and RGB texture.
+            </li>
+            <li>
+              <b>A 50/50 mix of random and context-block (V4)</b> beats both of
+              its parents on lexical caption similarity, a metric neither pure
+              mask leads alone.
+            </li>
+            <li>
+              <b>Text-side span masking (V3)</b> ties with the random baseline on
+              every text metric. We discuss this as a useful negative result that
+              locates the bottleneck, not as a failure.
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Introduction -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Introduction</h2>
+        <div class="content has-text-justified">
+          <p>
+            Multimodal masked models like 4M learn to fill in hidden tokens across
+            multiple modalities. The masking strategy at pre-training is the only
+            thing that defines this self-supervised objective. Random masking is
+            the default choice, but it has a subtle weakness. When a token is
+            hidden, its immediate neighbours in the same modality usually stay
+            visible, so the model can solve much of its training loss by predicting
+            from local context. Cross-modal binding (using depth to predict text,
+            or text to predict pixels) stays optional rather than necessary.
+          </p>
+          <p>
+            This raises an empirical question. If random masking lets the model
+            skip cross-modal binding, does a more constrained mask force the model
+            to learn fundamentally different skills? And do those skills transfer
+            to downstream cross-modal generation?
+          </p>
+          <p>
+            We test this on nano4M, a small four-modality version of 4M trained on
+            CLEVR. We train five variants under matched conditions: identical
+            FourM backbone (encoder and decoder depth 6, model dimension 512),
+            identical 5-billion-token training budget, identical optimizer,
+            matched random seeds. Only the masking strategy varies between
+            variants. The five strategies cover the obvious axes. V0 is the
+            random baseline. V1 hides contiguous square blocks of image tokens,
+            removing the local-neighbour shortcut. V2 keeps a single small visible
+            block per image modality, hiding around 90 percent of every image-side
+            input. V3 hides contiguous spans of the caption itself, with span
+            lengths calibrated to CLEVR field length. V4 alternates V0 and V2
+            per training sample.
+          </p>
+          <p>
+            We evaluate every variant under one unified protocol on the CLEVR
+            validation set. Per-modality reconstruction and cross-modal generation
+            in both directions. Seven metrics covering complementary aspects of
+            behaviour. Three random seeds per variant. Our headline finding is
+            that different masks produce different specialists, and the
+            specialism is predictable from the structure of the mask.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Method -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Method</h2>
+
+        <h3 class="title is-4">Setup</h3>
+        <div class="content has-text-justified">
+          <p>
+            The base model is nano4M, a four-modality FourM encoder-decoder
+            transformer with encoder depth 6, decoder depth 6, and model dimension
+            512. The four modalities are tokenised RGB, depth and surface-normal
+            maps via the Cosmos image tokenizer (16 by 16 = 256 tokens per
+            modality), plus a scene caption (scene_desc) tokenised with GPT-2 to
+            up to 256 tokens. Training runs for 5 billion tokens at batch size
+            256, approximately 38,000 iterations. The optimizer, data, and seeds
+            are all identical across variants. Only the masking strategy varies.
+          </p>
+          <p>
+            For each training sample, two integers are drawn independently and
+            uniformly from [1, 128]. One is the encoder-input budget, the other
+            is the decoder-target budget. A per-sample Dirichlet then splits each
+            budget across the four modalities. Within each modality, the masking
+            strategy decides which specific positions become encoder input and
+            which become decoder target. Positions selected by neither are unused
+            for that sample. The two integer ranges, the batch size, and the total
+            token budget are identical across all variants and ablations.
+          </p>
+        </div>
+
+        <figure class="figure">
+          <img src="static/images/mask_overview.png"
+               alt="Image-side masking strategies: V0 random, V1 block, V2 context-block, V4 mixed">
+          <figcaption>
+            <b>Figure 1.</b> Image-side masking strategies. Green is encoder input
+            (visible to the model), red is decoder target (the model must predict
+            it), dark grey is unused for this sample. V0 scatters input and target
+            positions uniformly. V1 clusters them inside square block regions. V2
+            keeps one s by s visible block per modality and scatters targets
+            outside. V4 alternates V0 and V2 per sample (50/50). V3 masks the text
+            modality and is shown in Figure 2.
+          </figcaption>
+        </figure>
+
+        <h3 class="title is-4">The five masking strategies</h3>
+        <div class="content has-text-justified">
+          <p>
+            <b>V0 baseline.</b> Image-side input and target positions are sampled
+            uniformly at random from the 256-position grid. Text-side positions
+            are also random within scene_desc. This is the original 4M masking
+            recipe and the reference all other variants are compared against.
+          </p>
+          <p>
+            <b>V1 block.</b> For each image modality, random s by s blocks (with
+            s drawn from {2, 3, 4} per sample) are placed on the 16 by 16 grid
+            until enough positions are covered for both budgets. The input and
+            target positions for that modality are then drawn from inside the
+            block region. This removes the local-neighbour shortcut by clustering
+            both input and target into block-shaped regions. Text-side masking
+            stays at V0.
+          </p>
+          <p>
+            <b>V2 ctxblock.</b> For each image modality, a single s by s visible
+            block (with s drawn from {4, 5, 6} per sample, block position sampled
+            independently per modality) is kept as encoder input. Target tokens
+            are then scattered outside the block. With around 10 percent of every
+            image-side modality visible on average, the caption becomes the only
+            substantially-visible scaffold and the model is forced to rely on
+            cross-modal context. Text-side masking stays at V0.
+          </p>
+          <p>
+            <b>V3 span.</b> The text modality gets contiguous-span masking. Span
+            lengths are drawn from a geometric distribution with mean 3 and placed
+            at random non-overlapping positions in scene_desc until the target
+            budget is filled. The mean span length was calibrated empirically
+            against CLEVR. The median GPT-2 tokenised length of a "Field: value"
+            phrase in scene_desc is exactly 3 tokens, so a typical span hides one
+            whole semantic field such as "Color: yellow" or "Shape: cube". Image
+            modalities keep V0 random masking.
+          </p>
+        </div>
+
+        <figure class="figure">
+          <img src="static/images/v3_text_mask.png"
+               alt="V3 span masking on real CLEVR scene_desc tokens">
+          <figcaption>
+            <b>Figure 2.</b> V3 span masking on real CLEVR scene_desc tokens
+            (first 40 GPT-2 tokens shown, sample seed 4). Top: V0 baseline
+            scatters single-token targets at random positions. Bottom: V3 span
+            produces contiguous runs of red target tokens, calibrated so a
+            typical run covers about one "Field: value" phrase.
+          </figcaption>
+        </figure>
+
+        <div class="content has-text-justified">
+          <p>
+            <b>V4 mixed.</b> Per training sample, a Bernoulli(0.5) coin is flipped.
+            Heads applies V0 masking to that sample, tails applies V2. The model
+            sees both objectives during training. The mixture ratio was set at
+            the TA's suggestion.
+          </p>
+        </div>
+
+        <h3 class="title is-4">Controlled ablations</h3>
+        <div class="content has-text-justified">
+          <p>
+            We further train six controlled ablations to test the sensitivity of
+            V1 and V2 to their block-size hyperparameter. V1 with the block size
+            fixed at 2, 3, and 4 individually (block_b2, block_b3, block_b4).
+            V2 with the ctxblock size fixed at 4, 5, and 6 individually
+            (ctxblock_c4, ctxblock_c5, ctxblock_c6). Each ablation is a full
+            retraining run from scratch with the corresponding size held fixed
+            instead of sampled, isolating the effect of size-sampling itself.
+          </p>
+        </div>
+
+        <h3 class="title is-4">Training dynamics</h3>
+        <div class="content has-text-justified">
+          <p>
+            We trained all five main variants under matched conditions,
+            varying only the masking strategy. Figure 6 confirms this
+            visually: training loss for all five main variants follows
+            the same shape across the full 5-billion-token budget. No
+            variant diverged, oscillated, or stalled. V2 ctxblock converges
+            to a marginally lower value than the other four, which we
+            attribute to its training objective being slightly easier to
+            fit (each sample has a single small visible image-block plus
+            many target tokens, so the model has both a clear scaffold to
+            condition on and a large prediction signal at every step).
+            This is not the same as downstream quality, which the headline
+            evaluation in the next section measures separately.
+          </p>
+        </div>
+
+        <figure class="figure">
+          <img src="static/images/loss_curves.png"
+               alt="Training loss for the five main variants over the 5-billion-token budget">
+          <figcaption>
+            <b>Figure 6.</b> Training loss for the five main variants over the
+            full 5-billion-token budget (38,146 steps, batch size 256). All
+            five curves track each other closely, confirming the
+            matched-conditions design. V2 ctxblock converges to a slightly
+            lower training loss than the other four. Curves are smoothed with
+            a 50-step rolling mean for readability.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Experiments -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Experiments and results</h2>
+
+        <h3 class="title is-4">Evaluation protocol</h3>
+        <div class="content has-text-justified">
+          <p>
+            We evaluate every variant under one unified protocol on a held-out
+            subset of the CLEVR val split, namely the first 500 sorted-by-filename
+            samples. Each variant is evaluated three times with seeds 0, 1, and 2
+            (same checkpoint, same 500 samples, only the stochastic token-sampling
+            RNG differs). Per-sample metric values are averaged across seeds.
+          </p>
+          <p>
+            Two task families. <b>Phase A reconstruction:</b> hide one modality
+            and rebuild it from the other three. <b>Phase B cross-modal
+            generation:</b> give the model a single modality and generate another
+            from scratch, in both directions (image to caption, caption to image).
+            All generation uses an 8-step parallel iterative decoder, matched
+            across variants.
+          </p>
+          <p>
+            Seven metrics covering complementary aspects of behaviour:
+          </p>
+          <ul>
+            <li>
+              <b>Parser field accuracy (sd/pos):</b> regex parser on the generated
+              caption, per-object position fields compared exactly to ground truth.
+            </li>
+            <li>
+              <b>CIDEr-D:</b> TF-IDF weighted n-gram overlap, computed on Phase A
+              scene_desc reconstruction (CIDEr A) and Phase B.1 image-to-caption
+              (CIDEr B).
+            </li>
+            <li>
+              <b>Depth AbsRel</b> and <b>RGB SSIM:</b> pixel-level reconstruction
+              quality on Phase A.
+            </li>
+            <li>
+              <b>LLM judge:</b> Qwen 2.5-7B-Instruct scores semantic alignment
+              between generated and ground-truth captions on Phase B.1.
+            </li>
+            <li>
+              <b>Object-detection F1:</b> GroundingDINO-tiny runs on the generated
+              image with the objects parsed from the ground-truth caption as
+              queries, F1 over the resulting set, Phase B.2 only.
+            </li>
+          </ul>
+        </div>
+
+        <h3 class="title is-4">Headline metrics</h3>
+        <div class="content has-text-justified">
+          <p>
+            Table 1 reports the 3-seed mean of every metric for every main variant.
+            Bold cells are column-best within the five main variants.
+          </p>
+        </div>
+
+        <div class="table-container">
+          <table class="table is-bordered is-striped is-narrow is-hoverable is-fullwidth">
+            <thead>
+              <tr>
+                <th rowspan="2">Variant</th>
+                <th colspan="4" class="has-text-centered">Reconstruction (Phase A)</th>
+                <th colspan="2" class="has-text-centered">Image &rarr; caption (B.1)</th>
+                <th class="has-text-centered">Caption &rarr; image (B.2)</th>
+              </tr>
+              <tr>
+                <th>sd/pos &uarr;</th>
+                <th>CIDEr A &uarr;</th>
+                <th>depth &darr;</th>
+                <th>RGB SSIM &uarr;</th>
+                <th>CIDEr B &uarr;</th>
+                <th>LLM &uarr;</th>
+                <th>DINO F1 &uarr;</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>V0 baseline</td>
+                <td>0.216</td><td>1.02</td><td>0.029</td><td>0.883</td>
+                <td>0.89</td><td>0.103</td><td>0.633</td>
+              </tr>
+              <tr>
+                <td>V1 block</td>
+                <td>0.211</td><td>0.99</td>
+                <td><b>0.027</b></td><td><b>0.888</b></td>
+                <td>0.90</td><td>0.106</td><td>0.649</td>
+              </tr>
+              <tr>
+                <td>V2 ctxblock</td>
+                <td><b>0.519</b></td><td><b>1.54</b></td>
+                <td>0.029</td><td>0.886</td>
+                <td>0.78</td><td><b>0.122</b></td><td><b>0.659</b></td>
+              </tr>
+              <tr>
+                <td>V3 span</td>
+                <td>0.220</td><td>1.00</td><td>0.029</td><td>0.884</td>
+                <td>0.82</td><td>0.097</td><td>0.643</td>
+              </tr>
+              <tr>
+                <td>V4 mixed</td>
+                <td>0.243</td><td>1.10</td><td>0.029</td><td>0.883</td>
+                <td><b>0.94</b></td><td>0.109</td><td>0.653</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 class="title is-4">Findings</h3>
+        <div class="content has-text-justified">
+          <p>
+            <b>Finding 1: V2 ctxblock wins on meaning-aware and object-grounded
+            metrics in both directions.</b> V2 takes the highest parser field
+            accuracy by a large margin (0.519 against 0.216 baseline, a 2.4x
+            relative improvement at placing objects), the highest CIDEr A on
+            Phase A reconstruction (1.54 against 1.02), the highest LLM judge
+            on Phase B.1 (0.122 against 0.103) and the highest object-detection
+            F1 on Phase B.2 (0.659 against 0.633). The three metrics that
+            actually look at semantic or object-level content all agree V2 is
+            the strongest variant. The mechanism is consistent with the training
+            objective. With around 90 percent of every image-side modality hidden
+            during training, the only substantially-visible scaffold is the
+            caption, so the model is pushed to bind image tokens to text, and
+            that binding pays off at generation time.
+          </p>
+          <p>
+            <b>Finding 2: V1 block wins pixel-level reconstruction.</b> V1
+            achieves the lowest depth AbsRel (0.027 against 0.029) and the
+            highest RGB SSIM (0.888 against 0.883). Block masking removes the
+            local-neighbour shortcut by forcing the model to predict from
+            non-adjacent context, which is what sharper depth and RGB textures
+            need.
+          </p>
+          <p>
+            <b>Finding 3: V4 mixed wins lexical caption similarity in
+            image-to-caption.</b> V4 wins CIDEr B with 0.94, beating both of
+            its parents (V0 = 0.89, V2 = 0.78), and beating V2 in particular,
+            which is the worst on this lexical metric. Image-to-caption needs
+            both broad token coverage (V0's strength) and cross-modal binding
+            (V2's strength). Neither pure mask wins this row alone. The hybrid
+            does.
+          </p>
+          <p>
+            <b>Finding 4: V3 span ties with V0 baseline.</b> On every text-side
+            metric, V3 sits within one seed standard deviation of V0. Parse rate
+            0.998 vs 0.999. CIDEr A 1.00 vs 1.02. sd/pos 0.220 vs 0.216. LLM
+            judge 0.097 vs 0.103. CIDEr B 0.82 vs 0.89. The only metric where
+            V3 nudges ahead beyond seed noise is parser/color (0.058 vs 0.048).
+            We report this as a negative result. Text-side span masking, even
+            when calibrated to the data (mean span length 3 matches the median
+            CLEVR Field:value tokenised length), did not meaningfully improve
+            text generation over V0 at our 5-billion-token budget. Our reading
+            is threefold. First, CLEVR's per-field vocabulary is small (three
+            shapes, eight colors, two materials), and V0 already saturates these
+            marginals. Second, text is one of four modalities in the loss, so
+            the masking-strategy gradient is diluted by the three image
+            modalities. Third, the bottleneck is visual grounding (unchanged by
+            V3) rather than text-side prediction. None of this invalidates the
+            V3 design. It locates the bottleneck.
+          </p>
+        </div>
+
+        <h3 class="title is-4">Ablations</h3>
+        <div class="content has-text-justified">
+          <p>
+            The six block-size ablations confirm that V1's pixel-reconstruction
+            win is broadly robust to the block size (depth AbsRel = 0.027 at
+            block_b3 and block_b4, 0.028 at block_b2; RGB SSIM is also stable
+            across the three values). V2's wins, in contrast, depend on
+            size-sampling. Every ctxblock_c4 / c5 / c6 ablation underperforms
+            V2 main on field accuracy, CIDEr A, LLM judge and DINO F1, often
+            substantially (CIDEr B drops from V2 main's 0.78 to 0.32 at
+            ctxblock_c5 and 0.30 at ctxblock_c6). The random sampling across
+            {4, 5, 6}, not any single fixed size, is what makes V2 a robust
+            cross-modal binder. The full table including all six ablations is
+            in the appendix of the report PDF.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Qualitative -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Qualitative gallery</h2>
+        <div class="content has-text-justified">
+          <p>
+            The figures below show Phase A reconstruction on CLEVR val sample
+            319, a 7-object scene. All five variants are given the same three
+            input modalities and asked to reconstruct the fourth from scratch.
+          </p>
+        </div>
+
+        <figure class="figure">
+          <img src="static/images/qual_rgb_recon.png"
+               alt="Phase A RGB reconstruction on CLEVR val sample 319">
+          <figcaption>
+            <b>Figure 3.</b> Phase A RGB reconstruction on CLEVR val sample 319.
+            All variants receive the same depth, normals and caption inputs.
+            V2's layout is visually closest to the ground truth, matching its
+            dominance on the semantic metrics in Table 1.
+          </figcaption>
+        </figure>
+
+        <figure class="figure">
+          <img src="static/images/qual_depth_recon.png"
+               alt="Phase A depth reconstruction on CLEVR val sample 319">
+          <figcaption>
+            <b>Figure 4.</b> Phase A depth reconstruction on CLEVR val sample
+            319. All five variants receive the same RGB, normals and caption
+            inputs. The depth maps recover the scene's surface structure across
+            variants. V1's reconstruction is slightly sharper at object
+            boundaries, consistent with its column-best depth AbsRel in Table 1.
+          </figcaption>
+        </figure>
+
+        <figure class="figure">
+          <img src="static/images/qual_normal_recon.png"
+               alt="Phase A surface-normal reconstruction on CLEVR val sample 319">
+          <figcaption>
+            <b>Figure 5.</b> Phase A surface-normal reconstruction on CLEVR val
+            sample 319. All five variants receive the same RGB, depth and caption
+            inputs. Normal maps encode the surface orientation per pixel as RGB.
+            Correctly oriented surfaces match the ground-truth colour pattern.
+          </figcaption>
+        </figure>
+
+        <div class="content has-text-justified">
+          <p>
+            The same sample (319) also gives us a text-modality qualitative
+            view. Each variant reconstructs the caption from the three image
+            inputs (RGB, depth, normals). The structural template (Object N -
+            Position: x=... y=... Shape: ... Color: ... Material: ...) is
+            recovered cleanly by every variant. V0 and V2 produce clean
+            seven-object captions matching the ground-truth object count.
+            V1 emits seven objects followed by a fragmented eighth. V4 stops
+            cleanly at six objects. V3 reaches six objects then emits a
+            garbled tail. Position values disagree with ground truth across
+            all variants, consistent with the low absolute sd/pos numbers
+            in Table 1.
+          </p>
+        </div>
+
+        <details class="captions-details">
+          <summary>Show verbatim captions for sample 319</summary>
+          <div class="captions-content">
+            <p>
+              <b>Ground truth.</b> Object 1 - Position: x=33 y=50 Shape: cube
+              Color: yellow Material: rubber. Object 2 - Position: x=58 y=30
+              Shape: sphere Color: cyan Material: rubber. Object 3 - Position:
+              x=55 y=37 Shape: cube Color: purple Material: rubber. Object 4 -
+              Position: x=82 y=46 Shape: cylinder Color: purple Material: metal.
+              Object 5 - Position: x=30 y=42 Shape: sphere Color: yellow
+              Material: metal. Object 6 - Position: x=45 y=32 Shape: sphere
+              Color: cyan Material: rubber. Object 7 - Position: x=16 y=41
+              Shape: sphere Color: yellow Material: rubber.
+            </p>
+            <p>
+              <b>V0 baseline.</b> Object 1 - Position: x=16 y=32 Shape: cylinder
+              Color: purple Material: metal. Object 2 - Position: x=34 y=40
+              Shape: sphere Color: cyan Material: metal. Object 3 - Position:
+              x=82 y=44 Shape: sphere Color: green Material: metal. Object 4 -
+              Position: x=83 y=50 Shape: cylinder Color: blue Material: rubber.
+              Object 5 - Position: x=47 y=38 Shape: sphere Color: brown
+              Material: rubber. Object 6 - Position: x=18 y=52 Shape: cube
+              Color: brown Material: rubber. Object 7 - Position: x=49 y=49
+              Shape: sphere Color: purple Material: metal.
+            </p>
+            <p>
+              <b>V1 block.</b> Object 1 - Position: x=83 y=39 Shape: cube Color:
+              green Material: metal. Object 2 - Position: x=30 y=47 Shape: sphere
+              Color: yellow Material: metal. Object 3 - Position: x=30 y=34
+              Shape: cylinder Color: yellow Material: metal. Object 4 - Position:
+              x=29 y=32 Shape: sphere Color: brown Material: rubber. Object 5 -
+              Position: x=80 y=44 Shape: cylinder Color: gray Material: rubber.
+              Object 6 - Position: x=79 y=32 Shape: cube Color: brown Material:
+              metal. Object 7 - Position: x=69 y=41 Shape: cylinder Color: brown
+              Material: rubber. Object 8 -: x=30 y=
+            </p>
+            <p>
+              <b>V2 ctxblock.</b> Object 1 - Position: x=82 y=50 Shape: sphere
+              Color: green Material: rubber. Object 2 - Position: x=34 y=43
+              Shape: cylinder Color: green Material: metal. Object 3 - Position:
+              x=44 y=31 Shape: sphere Color: yellow Material: rubber. Object 4 -
+              Position: x=55 y=36 Shape: cube Color: yellow Material: rubber.
+              Object 5 - Position: x=15 y=42 Shape: sphere Color: gray Material:
+              rubber. Object 6 - Position: x=45 y=31 Shape: sphere Color: cyan
+              Material: rubber. Object 7 - Position: x=44 y=31 Shape: sphere
+              Color: blue Material: rubber.
+            </p>
+            <p>
+              <b>V3 span.</b> Object 1 - Position: x=38 y=30 Shape: cube Color:
+              brown Material: rubber. Object 2 - Position: x=58 y=39 Shape:
+              cylinder Color: yellow Material: rubber. Object 3 - Position: x=83
+              y=33 Shape: cube Color: green Material: metal. Object 4 - Position:
+              x=69 y=29 Shape: sphere Color: purple Material: rubber. Object 5 -
+              Position: x=30 y=35 Shape: sphere Color: green Material: rubber.
+              Object 6 - Position: x=44 y=29 Shape: sphere Color: purple
+              Material: rubber. -=16 8
+            </p>
+            <p>
+              <b>V4 mixed.</b> Object 1 - Position: x=56 y=51 Shape: cylinder
+              Color: cyan Material: rubber. Object 2 - Position: x=47 y=40
+              Shape: sphere Color: brown Material: rubber. Object 3 - Position:
+              x=29 y=37 Shape: cylinder Color: blue Material: rubber. Object 4 -
+              Position: x=14 y=42 Shape: cube Color: blue Material: metal.
+              Object 5 - Position: x=59 y=33 Shape: sphere Color: cyan Material:
+              rubber. Object 6 - Position: x=82 y=35 Shape: cylinder Color:
+              gray Material: rubber.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Limitations -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Limitations</h2>
+        <div class="content has-text-justified">
+          <p>
+            Our experiments are confined to CLEVR, which has a small per-field
+            vocabulary; rankings may shift on richer language data. Three seeds
+            per variant suffices to confirm the large gaps we report (V2's 2.4x
+            field-accuracy lead) are outside seed variability, but is not
+            enough to claim significance for the smaller gaps. The per-sample
+            LLM-judge / parser agreement on Phase B.1 is low (around 0.10);
+            we therefore treat the LLM judge as a supplementary signal, not
+            the primary one for text generation.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Future work -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Future work</h2>
+        <div class="content has-text-justified">
+          <p>
+            Two natural directions. First, an alternative V3 implementation
+            using canonical T5-style span corruption under a fine-tuning regime,
+            since T5 was designed as a pre-train-then-fine-tune objective.
+            Second, exploring alternative iterative-decoding orders (centre-outward
+            spiral, anchor-then-fill, raster) instead of the current
+            confidence-first scheme.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Team -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Team and contributions</h2>
+        <div class="content has-text-justified">
+          <p>
+            Per the Team 11 Extension Plan:
+          </p>
+          <ul>
+            <li><b>Gabriel Chidiac.</b> V0 baseline, V2 context-block and its ablations.</li>
+            <li><b>Nacer Saadani-Hassani.</b> V1 block and its ablations.</li>
+            <li><b>Ricardo Habib.</b> V3 span, V4 mixed, evaluation extensions.</li>
+            <li><b>Ralph Chidiac.</b> Evaluation pipeline and evaluation extensions.</li>
+          </ul>
+          <p>
+            All authors contributed to the report.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BibTeX -->
+<section class="section" id="bibtex" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">BibTeX</h2>
+        <pre><code>@misc{team11nano4m2026,
+  title  = {Masking Strategies for nano4M},
+  author = {Habib, Ricardo and Chidiac, Ralph and
+            Saadani-Hassani, Nacer and Chidiac, Gabriel},
+  year   = {2026},
+  note   = {COM-304 Foundation Models, Spring 2026 final project,
+            \'Ecole Polytechnique F\'ed\'erale de Lausanne}
+}</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Acknowledgments -->
+<section class="section" style="padding-top: 0;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Acknowledgments</h2>
+        <div class="content has-text-justified">
+          <p>
+            We thank the COM-304 teaching staff for providing the nano4M
+            codebase and the pre-tokenised CLEVR dataset. We thank our TA
+            for their guidance throughout the project. Training was
+            performed on EPFL's SCITAS cluster.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8 has-text-centered">
+        <p class="is-size-7">
+          Website source available on
+          <a href="https://github.com/rhabib22/nano4M-masking-strategies">GitHub</a>.
+          Template adapted from the
+          <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a>
+          project page (Creative Commons Attribution-ShareAlike 4.0 International).
+        </p>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

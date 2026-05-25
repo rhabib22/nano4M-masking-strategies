@@ -1,0 +1,196 @@
+/* Custom styles for the project page.
+   Adapted from the Nerfies project page template. */
+
+body {
+  font-family: 'Noto Sans', sans-serif;
+}
+
+.hero-logo {
+  height: 60px;
+  margin-bottom: 1.2em;
+}
+
+.publication-title {
+  font-family: 'Google Sans', sans-serif;
+  margin-bottom: 0.5em;
+}
+
+.publication-subtitle {
+  color: #555;
+  font-family: 'Google Sans', sans-serif;
+  margin-bottom: 1.5em;
+}
+
+.publication-authors {
+  font-family: 'Google Sans', sans-serif;
+  margin-bottom: 0.5em;
+}
+
+.publication-authors .author-block {
+  margin-right: 0.5em;
+}
+
+.publication-affiliation {
+  color: #555;
+  font-family: 'Google Sans', sans-serif;
+  margin-bottom: 1.5em;
+}
+
+.publication-affiliation .affiliation-block {
+  display: inline-block;
+}
+
+.publication-links {
+  margin-top: 1.5em;
+}
+
+.publication-links .link-block {
+  margin-right: 0.5em;
+}
+
+.hero-body {
+  padding-top: 4rem;
+  padding-bottom: 2rem;
+}
+
+.section {
+  padding: 2rem 1.5rem;
+}
+
+.section .title.is-3 {
+  font-family: 'Google Sans', sans-serif;
+  margin-bottom: 1em;
+}
+
+.section .title.is-4 {
+  font-family: 'Google Sans', sans-serif;
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.figure {
+  margin: 2em 0;
+}
+
+.figure img {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.figure figcaption {
+  margin-top: 1em;
+  font-size: 0.95em;
+  color: #444;
+  line-height: 1.5;
+  text-align: justify;
+}
+
+.table-container {
+  margin: 1em 0 2em 0;
+  overflow-x: auto;
+}
+
+table.table {
+  font-size: 0.9em;
+}
+
+table.table thead th {
+  text-align: center;
+  vertical-align: middle;
+  background-color: #f5f5f5;
+}
+
+table.table tbody td {
+  text-align: center;
+}
+
+table.table tbody td:first-child {
+  text-align: left;
+  font-weight: 500;
+}
+
+pre {
+  background-color: #f5f5f5;
+  padding: 1em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  overflow-x: auto;
+}
+
+.captions-details {
+  margin: 1.5em 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 1em 1.25em;
+  background-color: #fafafa;
+}
+
+.captions-details summary {
+  cursor: pointer;
+  font-family: 'Google Sans', sans-serif;
+  font-weight: 500;
+  color: #444;
+  outline: none;
+}
+
+.captions-details summary:hover {
+  color: #000;
+}
+
+.captions-details[open] summary {
+  margin-bottom: 1em;
+  padding-bottom: 0.75em;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.captions-content p {
+  margin-bottom: 0.9em;
+  font-size: 0.92em;
+  line-height: 1.55;
+  text-align: justify;
+}
+
+.captions-content p:last-child {
+  margin-bottom: 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+.content ul {
+  margin-left: 1.5em;
+}
+
+.content li {
+  margin-bottom: 0.5em;
+}
+
+.footer {
+  background-color: #fafafa;
+  padding: 2rem 1.5rem;
+  margin-top: 2rem;
+}
+
+.footer a {
+  color: #555;
+  text-decoration: underline;
+}
+
+@media screen and (max-width: 768px) {
+  .hero-body {
+    padding-top: 2rem;
+  }
+  .publication-title {
+    font-size: 2rem !important;
+  }
+  .publication-subtitle {
+    font-size: 1.1rem !important;
+  }
+  .section {
+    padding: 1.5rem 1rem;
+  }
+}
